@@ -17,16 +17,26 @@ class BiLSTM(nn.Module):
         self.word_embeds = nn.Embedding(vocab_size, embedding_dim, padding_idx=vocab_size-1)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim // 2, num_layers=1, bidirectional=True, batch_first=True)
 
-    def forward(self, x, length):
+    def forward(self, x, lengths):
         """
         :param x: tensor of word idx of size (batch_size, seq_length)
+        :param lengths: tensort of lengths
         :return: bilstm otput of size (batch_size, seq_len, hidden_size)
         https://stackoverflow.com/questions/49466894/how-to-correctly-give-inputs-to-embedding-lstm-and-linear-layers-in-pytorch
         """
+        orig_len = x.shape[1]
         embeds = self.word_embeds(x)
-        lstm_input = nn.utils.rnn.pack_padded_sequence(embeds, length, batch_first=True)
+
+        lengths, sort_idx = lengths.sort(0, descending=True)
+        embeds = embeds[sort_idx]
+
+        lstm_input = nn.utils.rnn.pack_padded_sequence(embeds, lengths, batch_first=True)
         h_out, (_, _) = self.lstm(lstm_input)
-        h_out, _ = nn.utils.rnn.pad_packed_sequence(h_out, batch_first=True)
+        h_out, _ = nn.utils.rnn.pad_packed_sequence(h_out, batch_first=True, total_length=orig_len)
+
+        _, unsort_idx = sort_idx.sort(0)
+        h_out = h_out[unsort_idx]
+
         return h_out
 
 
