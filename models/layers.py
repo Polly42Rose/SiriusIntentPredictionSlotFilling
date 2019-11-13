@@ -3,7 +3,7 @@ import torch.nn as nn
 
 torch.manual_seed(1)
 
-
+# pack padding sequence
 class BiLSTM(nn.Module):
 
     def __init__(self, vocab_size, embedding_dim, hidden_dim=64):
@@ -13,6 +13,7 @@ class BiLSTM(nn.Module):
         self.lstm = nn.LSTM(embedding_dim, hidden_dim // 2, num_layers=1, bidirectional=True)
 
     def forward(self, x):
-        embeds = self.word_embeds(x).view(len(x[0]), len(x), -1)
+        embeds = nn.utils.rnn.pad_sequence(x, batch_first=True)
+        embeds = self.word_embeds(embeds).view(len(embeds[0]), len(embeds), -1)
         h_out, (_, _) = self.lstm(embeds)
         return h_out
