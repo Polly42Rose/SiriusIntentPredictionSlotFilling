@@ -15,7 +15,7 @@ class BiLSTM(nn.Module):
         super(BiLSTM, self).__init__()
         self.hidden_dim = hidden_dim
         self.word_embeds = nn.Embedding(vocab_size, embedding_dim, padding_idx=vocab_size-1)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim // 2, num_layers=1, bidirectional=True)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim // 2, num_layers=1, bidirectional=True, batch_first=True)
 
     def forward(self, x, length):
         """
@@ -24,9 +24,9 @@ class BiLSTM(nn.Module):
         https://stackoverflow.com/questions/49466894/how-to-correctly-give-inputs-to-embedding-lstm-and-linear-layers-in-pytorch
         """
         embeds = self.word_embeds(x)
-        lstm_input = nn.utils.rnn.pack_padded_sequence(embeds, length)
+        lstm_input = nn.utils.rnn.pack_padded_sequence(embeds, length, batch_first=True)
         h_out, (_, _) = self.lstm(lstm_input)
-        h_out, _ = nn.utils.rnn.pad_packed_sequence(h_out)
+        h_out, _ = nn.utils.rnn.pad_packed_sequence(h_out, batch_first=True)
         return h_out
 
 
