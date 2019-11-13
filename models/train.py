@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
 
-from models.dataset import ATIS
-# from models.bilstm_model import
+from models.dataset import ATIS, preprocess_atis, padding_map
+from models.bilstm_model import BiLSTMmodel
 
 import torch
+import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 import torch.utils.data as data
 from torch.optim import Adam
@@ -25,6 +26,8 @@ def main(data_path='data/raw_data/ms-cntk-atis/'):
     params = {'batch_size': 128,
               'shuffle': True}
 
+    print(f'DEVICE: {device}')
+
     # 1) Загрузить данные
     ## 1. Разобраться с тем, как устроенны данные - текст разбит на числовые токены, лэйблы занумерованы
     ## 2. Если все не ок, написать выгрузку, иначе сразу 3.
@@ -44,66 +47,51 @@ def main(data_path='data/raw_data/ms-cntk-atis/'):
     # 2) Препроцесс
     ## 1. По сути надо все переписать в двумерные массивы
     ## 2. One-Hot Encode меток
-    # Эту часть надо обернуть в функцию, так как для теста то же самое !!!!!!!
-    X_train = []
-    y_slot_train = []
-    y_intent_train = []
-    for i in range(len(train_seq)):
-        X_train.append(torch.tesnor(train_seq[0].iloc[i].split()))
 
-        intent = [0] * INTENTS
-        intent[intent_train[i]] = 1
-        y_intent_train.append(intent)  # (batch, INTENTS)
-
-        slot = []  # двумерная матрица (SLOTS, seq_len)
-        for j in range(len(slot_train[0].iloc[i].split())):
-            cur_slot = [0] * SLOTS
-            cur_slot[slot_train[0].iloc[i].split()[j]] = 1
-            slot.append(torch.tensor(cur_slot))
-        # как здесь стоит паддить - нулями, так как все равно использум кросс энтропию,
-        # а значит - эти нули не будут никак задействованы
-        y_slot_train.append(slot)  # (batch, seq_len, SLOTS)
-    y_intent_train = torch.tensor(y_intent_train)
-
-    X_train, y_slot_train, y_intent_train = ...()
-    X_test, y_slot_test, y_intent_test = ...()
+    X_train, y_slot_train, y_intent_train = preprocess_atis(train_seq, intent_train, slot_train, INTENTS, SLOTS)
+    X_test, y_slot_test, y_intent_test = preprocess_atis(test_seq, intent_test, slot_test, INTENTS, SLOTS)
 
 
     ## 3. Паддинг - так как уже есть разбитый вакубуляр, можем добить один токен, который отвеает за паддинг
     X_train = pad_sequence(X_train, batch_first=True,
                            padding_value=vocab_size).to(torch.long)  # size: tensor(batch, max_seq_len)
     y_slot_train = pad_sequence(y_slot_train, batch_first=True,
-                           padding_value=0).to(torch.long)  # size: tensor(batch, max_seq_len, SLOTS)
+                                padding_value=-100).to(torch.long)  # size: tensor(batch, max_seq_len, SLOTS)
     X_test = pad_sequence(X_test, batch_first=True,
-                           padding_value=vocab_size).to(torch.long)  # size: tensor(batch, max_seq_len)
+                          padding_value=vocab_size).to(torch.long)  # size: tensor(batch, max_seq_len)
     y_slot_test = pad_sequence(y_slot_test, batch_first=True,
-                                padding_value=0).to(torch.long)  # size: tensor(batch, max_seq_len, SLOTS)
+                               padding_value=-100).to(torch.long)  # size: tensor(batch, max_seq_len, SLOTS)
     vocab_size += 1
 
-
-    ## 4. Карта паддинга, для механизма внимания
-    ### ????
 
     # 3) Даталоадер
     training = data.DataLoader(ATIS(X_train, y_slot_train, y_intent_train), **params)
     testing = data.DataLoader(ATIS(X_test, y_slot_test, y_intent_test), **params)
 
     # 4) Инициализация модели, оптимайзера
-    model = MODEL().to(device)
-    optimizer = Adam(lr=0.01)
+    model = BiLSTMmodel(vocab_size, embedding_dim=100, n_slots=SLOTS,
+                        n_intents=INTENTS, hidden_dim=64).to(device)
+    optimizer = Adam(params=model.parameters(), lr=0.01)
     scheduler = LambdaLR(optimizer, lr_lambda=lambda step: step / (1 + DECAY_RATE*step))
-
+    cr_slot = nn.CrossEntropyLoss(ignore_index=-100)
+    cr_intent = nn.CrossEntropyLoss()
 
     # 5) Обучение и валидация
+    for X, slot, intent in training:
+        break
     for ep in range(N_EPOCHS):
+        print(f'epoch: {ep}')
 
         model.train()
         losses = []
-        for X, slot, intent in training:
+        #for X, slot, intent in training:
+        for i in range(32):
+            lengths = padding_map(X, padding_value=vocab_size - 1)
+
             optimizer.zero_grad()
             X, slot, intent = X.to(device), slot.to(device), intent.to(device)
-            output = model(X)
-            loss = cr_slot(output, slot) + cr_intent(output, intent)
+            slot_pred, intent_pred = model(X, lengths)  # (batch, seq_len, n_slots), (batch, n_intents)
+            loss = cr_slot(slot_pred, slot) + cr_intent(intent_pred, intent)
             loss.backward()
             losses.append(float(loss.cpu()))
             optimizer.step()
@@ -114,12 +102,14 @@ def main(data_path='data/raw_data/ms-cntk-atis/'):
         with torch.no_grad():
             model.eval()
             losses = []
-            for X, slot, intent in training:
+            for X, slot, intent in testing:
+                lengths = padding_map(X, padding_value=vocab_size - 1)
                 X, slot, intent = X.to(device), slot.to(device), intent.to(device)
-                output = model(X)
-                loss = cr_slot(output, slot) + cr_intent(output, intent)
+                slot_pred, intent_pred = model(X, lengths)
+                loss = cr_slot(slot_pred, slot) + cr_intent(intent_pred, intent)
                 losses.append(float(loss.cpu()))
         val_loss = np.mean(losses)
+        print(f'train_loss: {train_loss}, val_loss: {val_loss}')
 
 
 if __name__ == '__main__':
