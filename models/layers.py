@@ -20,7 +20,7 @@ class BiLSTM(nn.Module):
     def forward(self, x, length):
         """
         :param x: tensor of word idx of size (batch_size, seq_length)
-        :return: bilstm otput of size (seq_len, batch_size, hidden_size)
+        :return: bilstm otput of size (batch_size, seq_len, hidden_size)
         https://stackoverflow.com/questions/49466894/how-to-correctly-give-inputs-to-embedding-lstm-and-linear-layers-in-pytorch
         """
         embeds = self.word_embeds(x)
