@@ -25,7 +25,7 @@ class BiLSTM(nn.Module):
         """
         embeds = self.word_embeds(x)
         lstm_input = nn.utils.rnn.pack_padded_sequence(embeds, length)
-        h_out, (_, _) = self.lstm(embeds)
+        h_out, (_, _) = self.lstm(lstm_input)
         h_out, _ = nn.utils.rnn.pad_packed_sequence(h_out)
         return h_out
 
