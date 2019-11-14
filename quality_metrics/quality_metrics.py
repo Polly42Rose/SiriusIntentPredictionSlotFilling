@@ -13,15 +13,23 @@ def slot_f1(labels, preds, num_slot):
     list_len = labels.shape[0]
     precision = 0
     recall = 0
+    
     for i, label in enumerate(labels):
         pred = preds[i]
-        true_pos = [len([j for j in range(len(label)) if label[j] == pred[j] and label[j] == k]) for k in range(num_slot)]
-        false_pos = [len([j for j in range(len(label)) if pred[j] != k and pred[j] == k]) for k in range(num_slot)]
-        false_neg = [len([j for j in range(len(label)) if pred[j] == k and label[j] != k]) for k in range(num_slot)]
+        true_pos = [0] * num_slot
+        false_pos = [0] * num_slot
+        false_neg = [0] * num_slot
+        for j in range(len(label)):
+            if label[j] == pred[j]:
+                true_pos[label[j]] += 1
+            else:
+                false_pos[pred[j]] += 1
+                false_neg[label[j]] += 1
         precision += np.mean([true_pos[i] / (true_pos[i] + false_pos[i]) if true_pos[i] + false_pos[i] > 0 else 0 
                               for i in range(num_slot)])
         recall += np.mean([true_pos[i] / (true_pos[i] + false_neg[i]) if true_pos[i] + false_neg[i] > 0 else 0
                            for i in range(num_slot)])
+       
     precision = precision / list_len
     recall = recall / list_len
     recall = np.mean(np.array(recall))
