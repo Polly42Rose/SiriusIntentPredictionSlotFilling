@@ -26,23 +26,25 @@ class BiLSTMmodel(nn.Module):
         self.intent_linear = nn.Linear(in_features=hidden_dim, out_features=n_intents)
 
     def forward(self, x, lengths):
-        # ## LSTM + attention + iteration mechanism
+        ## LSTM + attention + iteration mechanism
+        print('lstm')
+        output = self.rnn(x, lengths)
+        print('attntn')
+        slot = self.att_slot(output)
+        intent = self.att_intent(output)
+        print('iteration')
+        intent, slot = self.iter_sf_id(output, slot, intent)
+        return torch.transpose(slot, 1, 2), intent
+
+        # ## LSTM + attention + ReLU + Linear
         # output = self.rnn(x, lengths)
         # slot = self.att_slot(output)
         # intent = self.att_intent(output)
-        #
-        # intent, slot = self.iter_sf_id(output, slot, intent)
+        # slot = self.relu(slot)
+        # intent = self.relu(intent)
+        # slot = self.slot_linear(slot)
+        # intent = self.intent_linear(intent)
         # return torch.transpose(slot, 1, 2), intent
-
-        ## LSTM + attention + ReLU + Linear
-        output = self.rnn(x, lengths)
-        slot = self.att_slot(output)
-        intent = self.att_intent(output)
-        slot = self.relu(slot)
-        intent = self.relu(intent)
-        slot = self.slot_linear(slot)
-        intent = self.intent_linear(intent)
-        return torch.transpose(slot, 1, 2), intent
 
         ### LSTM + ReLU + Linear
         # output = self.rnn(x, lengths)

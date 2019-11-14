@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 # torch.manual_seed(1)
 
 # torch.manual_seed(1)
@@ -17,9 +18,9 @@ class IterModel(nn.Module):
         self.V_SF = nn.Linear(in_features=hid_size, out_features=hid_size, bias=None)
         self.V1_ID = nn.Linear(in_features=hid_size, out_features=hid_size, bias=None)
         self.V2_ID = nn.Linear(in_features=hid_size, out_features=hid_size, bias=True)
-        self.W_ID = nn.Linear(in_features=hid_size, out_features=hid_size, bias=None)
+        self.W_ID = nn.Linear(in_features=hid_size, out_features=1, bias=None)
         self.W_inte_ans = nn.Linear(in_features=hid_size * 2, out_features=n_labels, bias=None)
-        self.W_slot_ans = nn.Linear(in_features=hid_size * 2, out_features=n_labels, bias=None)
+        self.W_slot_ans = nn.Linear(in_features=hid_size * 2, out_features=n_slots, bias=None)
 
     def forward(self, h, c_slot, c_inte):
         """
@@ -34,32 +35,41 @@ class IterModel(nn.Module):
         len_sents = c_slot.shape[1]
 
         for iter in range(iteration_num):
+            print('SF')
             # SF subnet
-            f = self.V_SF(torch.tanh(c_slot[:, 0, :] + self.W_SF(r_inte).float()))
-            for i in range(1, c_slot.shape[1]):
-                f += self.V_SF(nn.functional.tanh(c_slot[:, i, :] + self.W_SF(r_inte)))
-            r_slot = torch.stack(
-                [torch.stack([f[b] * c_slot[b, i, :] for i in range(len_sents)]) for b in range(batch_size)])
+            f = torch.tanh(c_slot + self.W_SF(r_inte).unsqueeze(1))  # [batch_size, len_sents, hid_size]
+            f = self.V_SF(f)  # [batch_size, len_sents, hid_size]
+            f = torch.sum(f, dim=1)  # [batch_size, hid_size]
+            r_slot = f.unsqueeze(1) * c_slot  # [batch_size, len_sents, hid_size]
+
 
             # ID subnet
-            hid_features = self.V1_ID(r_slot)
-            slot_features = self.V2_ID(h)
-            sum_for_softmax = torch.stack(
-                [torch.stack([torch.exp(self.W_ID(nn.functional.tanh(hid_features[:, i, :] + slot_features[:, j, :])))
-                              for j in range(len_sents)]) for i in range(len_sents)])
-            sum_for_softmax = torch.sum(sum_for_softmax, 3)
-            sum_for_softmax = torch.sum(sum_for_softmax, 2)
-            atts = torch.stack([sum_for_softmax[i][i] / sum(sum_for_softmax[i, :]) for i in range(len_sents)])
-            r = torch.zeros(c_inte.shape)
-            for i in range(len_sents):
-                r += atts[i] * r_slot[:, i, :]
+            print('ID')
+            slot_features = self.V1_ID(r_slot)  # [batch_size, len_sents, hid_size]
+            hid_features = self.V2_ID(h)  # [batch_size, len_sents, hid_size]
+            alphas = []
+            for i in tqdm(range(slot_features.shape[1])):
+                e_i = slot_features[:, i, :].unsqueeze(1)  # [batch_size, 1, hid_size]
+                e_i = self.W_ID(torch.tanh(e_i + hid_features))  # [batch_size, len_sents, 1]
+                e_i = e_i.squeeze(-1)  # [batch_size, len_sents]
+                alpha_i = torch.nn.functional.softmax(e_i, dim=1)  #  # [batch_size, len_sents]
+                alpha_i = alpha_i[:, i]  # [batch_size]
+                alphas.append(alpha_i)
+            alphas = torch.stack(alphas)  # [len_seq, batch]
+            alphas = torch.transpose(alphas, 0, 1)  # [batch, len_seq]
+
+            #  r_slot - [batch_size, len_sents, hid_size]
+            #  alphas - [batch, len_seq]
+
+            r = r_slot * alphas.unsqueeze(-1)  # [batch_size, len_sents, hid_size]
+            r = torch.sum(r, dim=1)  # [batch_size, hid_size]
             r_inte = r + c_inte
 
-        intent_output = self.W_inte_ans(torch.cat((r_inte, h[:, len_sents - 1, :]), 1))
-        slot_output = torch.stack(
-            [torch.stack([self.W_slot_ans(torch.cat((h[j, i, :], r_slot[j, i, :])))
-                          for i in range(len_sents)]) for j in range(batch_size)])
-        return intent_output, slot_output
+        intent_output = self.W_inte_ans(torch.cat((r_inte, h[:, len_sents - 1, :]), dim=1))  # [batch_size, n_intents]
+        slot_output = torch.cat((h, r_slot), dim=-1)   # [batch_size, seq_len, 2*hidden_size]
+        slot_output = self.W_slot_ans(slot_output)   # [batch_size, seq_len, n_slots]
+
+        return slot_output, intent_output
 
 
 class BiLSTM(nn.Module):
