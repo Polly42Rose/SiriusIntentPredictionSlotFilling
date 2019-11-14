@@ -1,10 +1,12 @@
 import torch
 import numpy as np
 
+
 def intent_accuracy(labels, preds):
     preds = torch.argmax(preds, dim=1)
     list_len = labels.shape[0]
     return len([i for i in range(list_len) if labels[i] == preds[i]]) / labels.shape[0]
+
 
 def slot_f1(labels, preds, num_slot):
     preds = torch.argmax(preds, dim=2)
@@ -17,7 +19,7 @@ def slot_f1(labels, preds, num_slot):
         precision += np.mean(np.array([len([j for j in range(len(label)) if label[j] == pred[j] and label[j] == k]) / 
                      len(label) for k in range(num_slot)]))
         recall += np.mean(np.array([len([j for j in range(len(label)) if label[j] == pred[j] and label[j] == k]) / 
-                  len([j for j in range(len(label)) if label[j] == k]) for k in range(num_slot)]))
+                  len([j for j in range(len(label)) if label[j] == k]) for k in range(num_slot)])) + 1
     precision = precision / list_len
     recall = recall / list_len
     recall = np.mean(np.array(recall))
@@ -26,6 +28,7 @@ def slot_f1(labels, preds, num_slot):
     else:
         f1 = 2 * precision * recall / (precision + recall)
     return precision, recall, f1
+
 
 def sentence_accuracy(i_labels, i_preds, s_labels, s_preds):
     ok = 0
