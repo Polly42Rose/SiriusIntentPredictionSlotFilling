@@ -43,20 +43,34 @@ class BiLSTM(nn.Module):
 class SlotAttention(nn.Module):
     def __init__(self, n_features=64):
         super(SlotAttention, self).__init__()
-
+        self.attention = nn.Linear(n_features, n_features)
 
     def forward(self, x):
         """
-
-        :param x: hidden states of LSTM
-        :return:
+        :param x: hidden states of LSTM (batch_size, seq_len, hidden_size)
+        :return: slot attention vector of size (batch_size, seq_len, hidden_size)
         """
-
+        weights = self.attention(x)  # (batch_size, hidden_size, hidden_size) weight of attention
+        output = torch.matmul(x, weights)
+        output = torch.matmul(output, torch.transpose(x, 1, 2))
+        output = torch.matmul(output, x)
+        return output
 
 
 class IntentAttention(nn.Module):
-    def __init__(self):
+    def __init__(self, n_features=64):
         super(IntentAttention, self).__init__()
+        self.attention = nn.Linear(n_features, n_features)
 
     def forward(self, x):
-        pass
+        """
+
+        :param x: hidden states of LSTM (batch_size, seq_len, hidden_size)
+        :return: intent vector of size (batch_size, hidden_size)
+        """
+        weights = self.attention(x)  # (batch_size, hidden_size, hidden_size) weight of attention
+        output = torch.matmul(x, weights)
+        output = torch.matmul(output, torch.transpose(x, 1, 2))
+        output = torch.matmul(output, x)
+        output = torch.sum(output, 1)
+        return output
