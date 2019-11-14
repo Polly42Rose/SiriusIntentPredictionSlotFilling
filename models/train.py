@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 
 from models.dataset import ATIS, preprocess_atis, padding_map
 from models.bilstm_model import BiLSTMmodel
+from quality_metrics.quality_metrics import intent_accuracy, slot_f1, sentence_accuracy
 
 import torch
 import torch.nn as nn
@@ -72,20 +74,23 @@ def main(data_path='data/raw_data/ms-cntk-atis/'):
     model = BiLSTMmodel(vocab_size, embedding_dim=100, n_slots=SLOTS,
                         n_intents=INTENTS, hidden_dim=64).to(device)
     optimizer = Adam(params=model.parameters(), lr=0.01)
-    scheduler = LambdaLR(optimizer, lr_lambda=lambda step: step / (1 + DECAY_RATE*step))
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda step: 1.0 / (1 + DECAY_RATE*step))
     cr_slot = nn.CrossEntropyLoss(ignore_index=-100)
     cr_intent = nn.CrossEntropyLoss()
 
     # 5) Обучение и валидация
-    for X, slot, intent in training:
-        break
+    # for X, slot, intent in training:
+    #     break
     for ep in range(N_EPOCHS):
         print(f'epoch: {ep}')
 
         model.train()
         losses = []
-        #for X, slot, intent in training:
-        for i in range(32):
+        int_acc = []
+        f1_slot = []
+        sent_acc = []
+        for X, slot, intent in training:
+        #for i in range(32):
             lengths = padding_map(X, padding_value=vocab_size - 1)
 
             optimizer.zero_grad()
@@ -96,20 +101,40 @@ def main(data_path='data/raw_data/ms-cntk-atis/'):
             losses.append(float(loss.cpu()))
             optimizer.step()
             scheduler.step()
+            int_acc.append(intent_accuracy(intent, intent_pred))
+            # f1_slot.append(slot_f1(slot, slot_pred, SLOTS))
+            # sent_acc.append(sentence_accuracy(intent, intent_pred, slot, slot_pred))
 
         train_loss = np.mean(losses)
+        train_int_acc = np.mean(int_acc)
+        # train_f1 = np.mean(f1_slot)
+        # train_sent_acc = np.mean(sent_acc)
 
         with torch.no_grad():
             model.eval()
             losses = []
-            for X, slot, intent in testing:
+            int_acc = []
+            f1_slot = []
+            sent_acc = []
+            for X, slot, intent in tqdm(testing):
                 lengths = padding_map(X, padding_value=vocab_size - 1)
                 X, slot, intent = X.to(device), slot.to(device), intent.to(device)
                 slot_pred, intent_pred = model(X, lengths)
                 loss = cr_slot(slot_pred, slot) + cr_intent(intent_pred, intent)
                 losses.append(float(loss.cpu()))
+                int_acc.append(intent_accuracy(intent, intent_pred))
+                f1_slot.append(slot_f1(slot, slot_pred, SLOTS))
+                sent_acc.append(sentence_accuracy(intent, intent_pred, slot, slot_pred))
+
         val_loss = np.mean(losses)
+        val_int_acc = np.mean(int_acc)
+        val_f1 = np.mean(f1_slot)
+        val_sent_acc = np.mean(sent_acc)
+
         print(f'train_loss: {train_loss}, val_loss: {val_loss}')
+        print(f'train: intent_acc={train_int_acc}')  #, f1_score={train_f1}, sent_acc={train_sent_acc}')
+        print(f'val: intent_acc={val_int_acc}, f1_score={val_f1}, sent_acc={val_sent_acc}')
+        print('_______________________________')
 
 
 if __name__ == '__main__':
