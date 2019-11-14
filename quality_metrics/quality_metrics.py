@@ -15,11 +15,13 @@ def slot_f1(labels, preds, num_slot):
     recall = 0
     for i, label in enumerate(labels):
         pred = preds[i]
-        print(label, pred)
-        precision += np.mean(np.array([len([j for j in range(len(label)) if label[j] == pred[j] and label[j] == k]) / 
-                     len(label) for k in range(num_slot)]))
-        recall += np.mean(np.array([len([j for j in range(len(label)) if label[j] == pred[j] and label[j] == k]) / 
-                  len([j for j in range(len(label)) if label[j] == k]) for k in range(num_slot)])) + 1
+        true_pos = [len([j for j in range(len(label)) if label[j] == pred[j] and label[j] == k]) for k in range(num_slot)]
+        false_pos = [len([j for j in range(len(label)) if pred[j] != k and pred[j] == k]) for k in range(num_slot)]
+        false_neg = [len([j for j in range(len(label)) if pred[j] == k and label[j] != k]) for k in range(num_slot)]
+        precision += np.mean([true_pos[i] / (true_pos[i] + false_pos[i]) if true_pos[i] + false_pos[i] > 0 else 0 
+                              for i in range(num_slot)])
+        recall += np.mean([true_pos[i] / (true_pos[i] + false_neg[i]) if true_pos[i] + false_neg[i] > 0 else 0
+                           for i in range(num_slot)])
     precision = precision / list_len
     recall = recall / list_len
     recall = np.mean(np.array(recall))
