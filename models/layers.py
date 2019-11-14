@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-
-torch.manual_seed(1)
+import torch.nn.functional as F
+# torch.manual_seed(1)
 
 
 class BiLSTM(nn.Module):
@@ -50,10 +50,10 @@ class SlotAttention(nn.Module):
         :param x: hidden states of LSTM (batch_size, seq_len, hidden_size)
         :return: slot attention vector of size (batch_size, seq_len, hidden_size)
         """
-        weights = self.attention(x)  # (batch_size, hidden_size, hidden_size) weight of attention
-        output = torch.matmul(x, weights)
-        output = torch.matmul(output, torch.transpose(x, 1, 2))
-        output = torch.matmul(output, x)
+        weights = self.attention(x)  # (batch_size, seq_len, hidden_size) - temporary weight
+        weights = torch.matmul(weights, torch.transpose(x, 1, 2))  # (batch_size, hidden_size, hidden_size) - att matrix
+        weights = F.softmax(weights, dim=2)
+        output = torch.matmul(weights, x)
         return output
 
 
@@ -68,9 +68,10 @@ class IntentAttention(nn.Module):
         :param x: hidden states of LSTM (batch_size, seq_len, hidden_size)
         :return: intent vector of size (batch_size, hidden_size)
         """
-        weights = self.attention(x)  # (batch_size, hidden_size, hidden_size) weight of attention
-        output = torch.matmul(x, weights)
-        output = torch.matmul(output, torch.transpose(x, 1, 2))
-        output = torch.matmul(output, x)
+        weights = self.attention(x)  # (batch_size, seq_len, hidden_size) - temporary weight
+        # output = torch.matmul(x, weights)
+        weights = torch.matmul(weights, torch.transpose(x, 1, 2))  # (batch_size, seq_len, seq_len) - att matrix
+        weights = F.softmax(weights, dim=2)
+        output = torch.matmul(weights, x)
         output = torch.sum(output, 1)
         return output
