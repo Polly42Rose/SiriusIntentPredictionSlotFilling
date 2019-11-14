@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models.layers import BiLSTM, IntentAttention, SlotAttention
+from models.layers import BiLSTM, IntentAttention, SlotAttention, IterModel
 
 
 class BiLSTMmodel(nn.Module):
@@ -18,6 +18,8 @@ class BiLSTMmodel(nn.Module):
         self.att_intent = IntentAttention(n_features=hidden_dim)
         self.att_slot = SlotAttention(n_features=hidden_dim)
 
+        self.iter_sf_id = IterModel(hidden_dim, n_intents, n_slots)
+
         # For temporary testing of layers
         self.relu = nn.ReLU()
         self.slot_linear = nn.Linear(in_features=hidden_dim, out_features=n_slots)
@@ -27,12 +29,21 @@ class BiLSTMmodel(nn.Module):
         output = self.rnn(x, lengths)
         slot = self.att_slot(output)
         intent = self.att_intent(output)
-        slot = self.relu(slot)
-        intent = self.relu(intent)
-        slot = self.slot_linear(slot)
-        intent = self.intent_linear(intent)
+
+        intent, slot = self.iter_sf_id(output, slot, intent)
         return torch.transpose(slot, 1, 2), intent
 
+        ### LSTM + attention + ReLU + Linear
+        # output = self.rnn(x, lengths)
+        # slot = self.att_slot(output)
+        # intent = self.att_intent(output)
+        # slot = self.relu(slot)
+        # intent = self.relu(intent)
+        # slot = self.slot_linear(slot)
+        # intent = self.intent_linear(intent)
+        # return torch.transpose(slot, 1, 2), intent
+
+        ### LSTM + ReLU + Linear
         # output = self.rnn(x, lengths)
         # output = self.relu(output)
         # slot = self.slot_linear(output)
