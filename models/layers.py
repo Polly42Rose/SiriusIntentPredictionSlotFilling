@@ -12,7 +12,7 @@ iteration_num = 3
 class IterModel(nn.Module):
     def __init__(self, hid_size, n_labels, n_slots):
         super(IterModel, self).__init__()
-        self.n_labels = n_labels
+        self.n_labels = n_labels    
         self.n_slots = n_slots
         self.W_SF = nn.Linear(in_features=hid_size, out_features=hid_size, bias=None)
         self.V_SF = nn.Linear(in_features=hid_size, out_features=hid_size, bias=None)
