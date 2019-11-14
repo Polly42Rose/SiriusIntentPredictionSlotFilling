@@ -26,8 +26,8 @@ class IterModel(nn.Module):
         params: h - hidden states [batch_size, len_sents, hid_size]
                 c_slot - slot context vector [batch_size, len_sents, hid_size]
                 c_inte - intent context vector [batch_size, hid_size]
-        return: intent_output - probabilities of each intent [batch_size, n_labels]
-                slot_output - probabilities of each slot [batch_size, len_sents, n_slots]
+        return: intent_output - intent features prepared for softmax [batch_size, n_labels]
+                slot_output - slot features prepared for softmax [batch_size, len_sents, n_slots]
         """
         r_inte = c_inte
         batch_size = c_slot.shape[0]
@@ -55,9 +55,9 @@ class IterModel(nn.Module):
                 r += atts[i] * r_slot[:, i, :]
             r_inte = r + c_inte
 
-        intent_output = nn.functional.softmax(self.W_inte_ans(torch.cat((r_inte, h[:, len_sents - 1, :]), 1)))
+        intent_output = self.W_inte_ans(torch.cat((r_inte, h[:, len_sents - 1, :]), 1))
         slot_output = torch.stack(
-            [torch.stack([nn.functional.softmax(self.W_slot_ans(torch.cat((h[j, i, :], r_slot[j, i, :]))))
+            [torch.stack([self.W_slot_ans(torch.cat((h[j, i, :], r_slot[j, i, :])))
                           for i in range(len_sents)]) for j in range(batch_size)])
         return intent_output, slot_output
 
